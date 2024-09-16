@@ -3,8 +3,8 @@ package network
 type ServeType int32
 
 const (
-	Serve_Client ServeType = 0
-	Serve_Server ServeType = 1
+	TypeClient ServeType = 0
+	TypeServer ServeType = 1
 )
 
 type IOptions interface {
@@ -15,15 +15,15 @@ type IOptions interface {
 
 type Options struct {
 	maxRetries int32
-	timeMills int64
-	data interface{}
+	timeMills  int64
+	data       interface{}
 }
 
-func WithMax(maxRetries int32,timeMills int64,data interface{}) IOptions {
+func WithMax(maxRetries int32, timeMills int64, data interface{}) IOptions {
 	return &Options{
 		maxRetries: maxRetries,
-		timeMills:timeMills,
-		data:data,
+		timeMills:  timeMills,
+		data:       data,
 	}
 }
 

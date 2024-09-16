@@ -36,11 +36,11 @@ func (r *router) RegisterMQ(msgQueueName string, handler func(content []byte)) {
 	r.msgQueueRouter[protocolNum] = handler
 }
 
-func (r *router) ExecRouterFunc(conn network.IConn, message network.TransitData) {
+func (r *router) ExecRouterFunc(message network.TransitData) {
 	r.Lock()
 	defer r.Unlock()
 	handler := r.routers[message.MsgId]
 	if handler != nil {
-		handler(conn, message.Data)
+		handler(message.Conn, message.Data)
 	}
 }
