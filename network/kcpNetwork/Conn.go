@@ -193,6 +193,9 @@ func (c *Conn) Start() {
 		}
 	}
 }
+func (c *Conn) GetRouter() router.IRouter {
+	return c.router
+}
 
 func (c *Conn) GetCreateTime() int64 {
 	return c.times

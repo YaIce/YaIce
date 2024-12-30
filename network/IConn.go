@@ -12,7 +12,7 @@ type IConn interface {
 	Send(message proto.Message) error
 	SendByte(message []byte) error
 	GetConn() interface{}
-	getRouter() router.IRouter
+	GetRouter() router.IRouter
 	GetIsPos() int64
 	GetCreateTime() int64
 	GetOptions() IOptions

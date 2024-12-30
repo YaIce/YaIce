@@ -107,7 +107,7 @@ func (c *Conn) GetIsPos() int64 {
 	return c.isPos
 }
 
-func (c *Conn) getRouter() router.IRouter {
+func (c *Conn) GetRouter() router.IRouter {
 	return c.router
 }
 
