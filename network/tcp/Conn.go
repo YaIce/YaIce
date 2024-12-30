@@ -107,6 +107,10 @@ func (c *Conn) GetIsPos() int64 {
 	return c.isPos
 }
 
+func (c *Conn) getRouter() router.IRouter {
+	return c.router
+}
+
 // 发送协议体
 func (c *Conn) Send(message proto.Message) error {
 	select {
