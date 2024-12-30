@@ -1,16 +1,19 @@
-package tcp
+package kcpNetwork
 
 import (
 	"context"
+	"fmt"
+	"github.com/xtaci/kcp-go/v5"
+	"github.com/yaice-rx/yaice/log"
 	"github.com/yaice-rx/yaice/network"
-	"net"
+	"go.uber.org/zap"
 	"time"
 )
 
-type TCPClient struct {
-	type_            network.ServeType //网络类型
-	dialRetriesCount int32             //拨号重试次数
-	address          string            //地址
+type KCPClient struct {
+	type_            network.ServeType
+	dialRetriesCount int32
+	address          string
 	conn             network.IConn
 	packet           network.IPacket
 	opt              network.IOptions
@@ -20,7 +23,7 @@ type TCPClient struct {
 }
 
 func NewClient(packet network.IPacket, address string, opt network.IOptions, callFunc func(conn network.IConn, err error)) network.IClient {
-	c := &TCPClient{
+	c := &KCPClient{
 		type_:            network.Serve_Client,
 		address:          address,
 		packet:           packet,
@@ -34,20 +37,16 @@ func NewClient(packet network.IPacket, address string, opt network.IOptions, cal
 	return c
 }
 
-func (c *TCPClient) Connect() network.IConn {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", c.address)
-	if err != nil {
-		c.callFunc(c.conn, err)
-		return nil
-	}
+func (c *KCPClient) Connect() network.IConn {
 LOOP:
-	tcpConn, err := net.DialTCP("tcp", nil, tcpAddr)
+	tcpConn, err := kcp.DialWithOptions(c.address, nil, 0, 0)
 	if err != nil {
 		time.Sleep(3 * time.Second)
 		if c.opt.GetMaxRetires() < c.dialRetriesCount {
-			c.callFunc(c.conn, err)
+			log.AppLogger.Error("网络重连失败:"+err.Error(), zap.String("function", "network.tcp.Client.Connect"))
 			return nil
 		}
+		log.AppLogger.Warn(fmt.Sprintf("第{%d}网络重连中", c.dialRetriesCount))
 		c.dialRetriesCount += 1
 		goto LOOP
 	}
@@ -59,11 +58,11 @@ LOOP:
 	return c.conn
 }
 
-func (c *TCPClient) ReConnect() network.IConn {
+func (c *KCPClient) ReConnect() network.IConn {
 	return c.Connect()
 }
 
-func (c *TCPClient) Close(err error) {
+func (c *KCPClient) Close(err error) {
 	c.cancel()
 	//设置当前客户端的状态
 	c.callFunc(c.conn, err)

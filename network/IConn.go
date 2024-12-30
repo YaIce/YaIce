@@ -1,12 +1,17 @@
 package network
 
+import (
+	"google.golang.org/protobuf/proto"
+)
+
 type IConn interface {
 	GetGuid() uint64
 	Close()
-	Receive()
-	Write()
+	Start()
+	Send(message proto.Message) error
+	SendByte(message []byte) error
 	GetConn() interface{}
-	GetServerAck() uint64
-	GetClientAck() uint64
-	GetSendChannel() chan []byte
+	GetIsPos() int64
+	GetCreateTime() int64
+	GetOptions() IOptions
 }

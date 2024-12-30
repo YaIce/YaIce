@@ -1,11 +1,6 @@
 package network
 
-import "google.golang.org/protobuf/proto"
-
 type IServer interface {
-	Listen(packet IPacket, startPort int, endPort int) int
+	Listen(packet IPacket, startPort int, endPort int, isAllowConnFunc func(conn interface{}) bool) int
 	Close()
-	SendByte(sessionGuid uint64, message []byte) error
-	SendProtobuf(sessionGuid uint64, message proto.Message) error
-	GetReceiveQueue() chan TransitData
 }

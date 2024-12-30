@@ -1,16 +1,15 @@
-package tcp
+package kcpNetwork
 
 import (
 	"context"
 	"errors"
+	"github.com/xtaci/kcp-go/v5"
 	"github.com/yaice-rx/yaice/log"
 	"github.com/yaice-rx/yaice/network"
 	"github.com/yaice-rx/yaice/router"
 	"github.com/yaice-rx/yaice/utils"
-	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"io"
-	"net"
 	"sync/atomic"
 	"time"
 )
@@ -21,7 +20,7 @@ type Conn struct {
 	isClosed     bool
 	times        int64
 	pkg          network.IPacket
-	conn         *net.TCPConn
+	conn         *kcp.UDPSession
 	serve        interface{}
 	data         interface{}
 	isPos        int64
@@ -32,14 +31,14 @@ type Conn struct {
 	cancel       context.CancelFunc
 }
 
-func NewConn(serve interface{}, conn *net.TCPConn, pkg network.IPacket, opt network.IOptions, type_ network.ServeType,
+func NewConn(serve interface{}, conn *kcp.UDPSession, pkg_ network.IPacket, opt network.IOptions, type_ network.ServeType,
 	ctx context.Context, cancelFunc context.CancelFunc) network.IConn {
 	conn_ := &Conn{
 		type_:        type_,
 		serve:        serve,
 		guid:         utils.GenSonyflakeToo(),
 		conn:         conn,
-		pkg:          pkg,
+		pkg:          pkg_,
 		receiveQueue: make(chan network.TransitData, 5000),
 		sendQueue:    make(chan []byte, 5000),
 		times:        time.Now().Unix(),
@@ -48,28 +47,25 @@ func NewConn(serve interface{}, conn *net.TCPConn, pkg network.IPacket, opt netw
 		ctx:          ctx,
 		cancel:       cancelFunc,
 	}
-	//数据写入
 	go func(conn_ *Conn) {
 		for data := range conn_.sendQueue {
 		LOOP:
 			_, err := conn_.conn.Write(data)
 			//判断客户端，如果不是主动关闭，而是网络抖动的时候 多次连接
 			if conn_.type_ == network.Serve_Client && nil != err {
-				if conn_.serve.(*TCPClient).dialRetriesCount > conn_.serve.(*TCPClient).opt.GetMaxRetires() && err != nil {
-					conn_.serve.(*TCPClient).Close(err)
+				if conn_.serve.(*KCPClient).dialRetriesCount > conn_.serve.(*KCPClient).opt.GetMaxRetires() && err != nil {
+					conn_.serve.(*KCPClient).Close(err)
 				}
-				if conn_.serve.(*TCPClient).dialRetriesCount <= conn_.serve.(*TCPClient).opt.GetMaxRetires() && err != nil {
-					conn_.serve.(*TCPClient).dialRetriesCount += 1
+				if conn_.serve.(*KCPClient).dialRetriesCount <= conn_.serve.(*KCPClient).opt.GetMaxRetires() && err != nil {
+					conn_.serve.(*KCPClient).dialRetriesCount += 1
 					goto LOOP
 				}
 			}
-			//发送成功
 			if conn_.type_ == network.Serve_Client {
-				conn_.serve.(*TCPClient).dialRetriesCount = 0
+				conn_.serve.(*KCPClient).dialRetriesCount = 0
 			}
 		}
 	}(conn_)
-	//数据读取
 	go func(conn_ *Conn) {
 		for data := range conn_.receiveQueue {
 			if data.MsgId != 0 {
@@ -116,7 +112,6 @@ func (c *Conn) Send(message proto.Message) error {
 			data, err := proto.Marshal(message)
 			protoId := utils.ProtocalNumber(utils.GetProtoName(message))
 			if err != nil {
-				log.AppLogger.Error("发送消息时，序列化失败 : "+err.Error(), zap.Int32("MessageId", protoId))
 				return err
 			}
 			c.sendQueue <- c.pkg.Pack(network.TransitData{protoId, data}, c.isPos)
@@ -143,7 +138,6 @@ func (c *Conn) Start() {
 	for {
 		select {
 		case <-c.ctx.Done():
-			log.AppLogger.Info("conn It has been closed ... ")
 			return
 		default:
 			//读取限时
@@ -156,7 +150,7 @@ func (c *Conn) Start() {
 			if err != nil {
 				if err != io.EOF {
 					if c.type_ == network.Serve_Client {
-						c.serve.(*TCPClient).Close(err)
+						c.serve.(*KCPClient).Close(err)
 					}
 					return
 				}
@@ -180,6 +174,7 @@ func (c *Conn) Start() {
 					}
 					continue
 				}
+				//调用外部解压方法
 				if func_ != nil {
 					func_(c)
 				}

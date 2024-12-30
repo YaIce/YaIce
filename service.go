@@ -2,97 +2,100 @@ package yaice
 
 import (
 	"context"
+	"github.com/yaice-rx/yaice/config"
 	"github.com/yaice-rx/yaice/network"
+	"github.com/yaice-rx/yaice/network/kcpNetwork"
 	"github.com/yaice-rx/yaice/network/tcp"
 	"github.com/yaice-rx/yaice/router"
 	"google.golang.org/protobuf/proto"
+	"reflect"
 )
 
-// 服务运行状态
+//服务运行状态
+var shutdown = make(chan bool, 1)
 
 type IService interface {
-	RegisterProtoHandler(message proto.Message, handler func(conn network.IConn, content []byte))
-	Listen(packet network.IPacket, network string, startPort int, endPort int, isAllowConnFunc func(conn interface{}) bool) (network.IServer, int)
-	Dial(packet network.IPacket, network string, address string, options network.IOptions, reConnCallBackFunc func(conn network.IConn, err error)) network.IClient
-	ProtoHandler(msgData network.TransitData)
+	AddRouter(message proto.Message, handler func(conn network.IConn, content []byte))
+	Listen(packet network.IPacket, network string, startPort int, endPort int, isAllowConnFunc func(conn interface{}) bool) int
+	Dial(packet network.IPacket, network string, address string, options network.IOptions, reConnCallBackFunc func(conn network.IConn, err error)) network.IConn
+	Close()
 }
 
 type service struct {
 	cancel      context.CancelFunc
 	routerMgr   router.IRouter
-	serviceType int
+	configMgr   config.IConfig
+	ServiceType int
 }
 
-// NewService
-//
-//	@Description: 服务初始化
-//	@return IService
+/**
+ * @param endpoints 集群管理中心连接节点
+ */
 func NewService() IService {
 	return &service{
 		routerMgr: router.RouterMgr,
+		configMgr: config.ConfInstance(),
 	}
 }
 
-// RegisterProtoHandler 注册网络处理方法
-//
-//	@Description:
-//	@receiver s
-//	@param message
-//	@param handler
-func (s *service) RegisterProtoHandler(message proto.Message, handler func(conn network.IConn, content []byte)) {
+/**
+ * @param message 消息传递结构体
+ * @param handler func(conn network.IConn, content []byte) 网络调用函数
+ */
+func (s *service) AddRouter(message proto.Message, handler func(conn network.IConn, content []byte)) {
 	s.routerMgr.AddRouter(message, handler)
 }
 
-// ProtoHandler
-//
-//	@Description: 消息处理
-//	@receiver s
-//	@param msgData
-func (s *service) ProtoHandler(msgData network.TransitData) {
-	s.routerMgr.ExecRouterFunc(msgData)
+func (s *service) RegisterMQProto(mqProto interface{}, handler func(content []byte)) {
+	val := reflect.Indirect(reflect.ValueOf(mqProto))
+	s.routerMgr.RegisterMQ(val.Field(0).Type().Name(), handler)
 }
 
-// Dial
-//
-//	@Description: 连接网络
-//	@receiver s
-//	@param packet packet 网络包的协议处理方式，如果传输为nil，则采用默认的方式
-//	@param network_ 网络连接方式
-//	@param address 地址
-//	@param options 传递参数
-//	@param callFunc 回调函数
-//	@return network.IConn
-func (s *service) Dial(packet network.IPacket, network_ string, address string, options network.IOptions, callFunc func(conn network.IConn, err error)) network.IClient {
+/**
+ * 连接网络
+ * @param network.IPacket  packet 网络包的协议处理方式，如果传输为nil，则采用默认的方式
+ * @param network string 网络连接方式
+ * @param address string 地址
+ * @param options 最大连接次数
+ */
+func (s *service) Dial(packet network.IPacket, network_ string, address string, options network.IOptions, callFunc func(conn network.IConn, err error)) network.IConn {
 	if packet == nil {
 		packet = tcp.NewPacket()
 	}
 	switch network_ {
+	case "kcpNetwork":
+		return kcpNetwork.NewClient(packet, address, options, callFunc).Connect()
 	case "tcp", "tcp4", "tcp6":
-		client := tcp.NewClient(packet, address, options, callFunc)
-		client.Connect()
-		return client
+		return tcp.NewClient(packet, address, options, callFunc).Connect()
 	}
 	return nil
 }
 
-// Listen
-//
-//	@Description: 监听网络
-//	@receiver s
-//	@param packet	网络包的协议处理方式，如果传输为nil，则采用默认的方式
-//	@param network_	网络连接方式
-//	@param startPort	监听端口范围开始
-//	@param endPort	监听端口范围结束
-//	@param isAllowConnFunc 是否允许连接
-//	@return int
-func (s *service) Listen(packet network.IPacket, network_ string, startPort int, endPort int, isAllowConnFunc func(conn interface{}) bool) (network.IServer, int) {
+/**
+ * @param network.IPacket  packet 网络包的协议处理方式，如果传输为nil，则采用默认的方式
+ * @param string network 网络连接方式
+ * @param int startPort 监听端口范围开始
+ * @param int endPort 监听端口范围结束
+ * @param func isAllowConnFunc  限制连接数，超过连接数的时候，由上层逻辑通知，底层不予维护
+ */
+func (s *service) Listen(packet network.IPacket, network_ string, startPort int, endPort int, isAllowConnFunc func(conn interface{}) bool) int {
 	if packet == nil {
 		packet = tcp.NewPacket()
 	}
 	switch network_ {
+	case "kcpNetwork":
+		serverMgr := kcpNetwork.NewServer()
+		return serverMgr.Listen(packet, startPort, endPort, isAllowConnFunc)
 	case "tcp", "tcp4", "tcp6":
-		server := tcp.NewServer()
-		return server, server.Listen(packet, startPort, endPort)
+		serverMgr := tcp.NewServer()
+		return serverMgr.Listen(packet, startPort, endPort, isAllowConnFunc)
 	}
-	return nil, 0
+	return 0
+}
+
+/**
+ * 关闭集群服务
+ */
+func (s *service) Close() {
+
 }
