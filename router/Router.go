@@ -13,9 +13,7 @@ type router struct {
 	msgQueueRouter map[int32]func(content []byte)
 }
 
-var RouterMgr = _NewRouterMgr()
-
-func _NewRouterMgr() IRouter {
+func NewRouterMgr() IRouter {
 	return &router{
 		routers: make(map[int32]func(conn network.IConn, content []byte)),
 	}

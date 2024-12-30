@@ -6,16 +6,12 @@ import (
 	"github.com/yaice-rx/yaice/network"
 	"github.com/yaice-rx/yaice/network/kcpNetwork"
 	"github.com/yaice-rx/yaice/network/tcp"
-	"github.com/yaice-rx/yaice/router"
-	"google.golang.org/protobuf/proto"
-	"reflect"
 )
 
-//服务运行状态
+// 服务运行状态
 var shutdown = make(chan bool, 1)
 
 type IService interface {
-	AddRouter(message proto.Message, handler func(conn network.IConn, content []byte))
 	Listen(packet network.IPacket, network string, startPort int, endPort int, isAllowConnFunc func(conn interface{}) bool) int
 	Dial(packet network.IPacket, network string, address string, options network.IOptions, reConnCallBackFunc func(conn network.IConn, err error)) network.IConn
 	Close()
@@ -23,7 +19,6 @@ type IService interface {
 
 type service struct {
 	cancel      context.CancelFunc
-	routerMgr   router.IRouter
 	configMgr   config.IConfig
 	ServiceType int
 }
@@ -33,22 +28,8 @@ type service struct {
  */
 func NewService() IService {
 	return &service{
-		routerMgr: router.RouterMgr,
 		configMgr: config.ConfInstance(),
 	}
-}
-
-/**
- * @param message 消息传递结构体
- * @param handler func(conn network.IConn, content []byte) 网络调用函数
- */
-func (s *service) AddRouter(message proto.Message, handler func(conn network.IConn, content []byte)) {
-	s.routerMgr.AddRouter(message, handler)
-}
-
-func (s *service) RegisterMQProto(mqProto interface{}, handler func(content []byte)) {
-	val := reflect.Indirect(reflect.ValueOf(mqProto))
-	s.routerMgr.RegisterMQ(val.Field(0).Type().Name(), handler)
 }
 
 /**

@@ -27,6 +27,7 @@ type Conn struct {
 	isPos        int64
 	sendQueue    chan []byte
 	receiveQueue chan network.TransitData
+	router       router.IRouter
 	opt          network.IOptions
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -40,6 +41,7 @@ func NewConn(serve interface{}, conn *net.TCPConn, pkg network.IPacket, opt netw
 		guid:         utils.GenSonyflakeToo(),
 		conn:         conn,
 		pkg:          pkg,
+		router:       router.NewRouterMgr(),
 		receiveQueue: make(chan network.TransitData, 5000),
 		sendQueue:    make(chan []byte, 5000),
 		times:        time.Now().Unix(),
@@ -73,7 +75,7 @@ func NewConn(serve interface{}, conn *net.TCPConn, pkg network.IPacket, opt netw
 	go func(conn_ *Conn) {
 		for data := range conn_.receiveQueue {
 			if data.MsgId != 0 {
-				router.RouterMgr.ExecRouterFunc(conn_, data)
+				conn_.router.ExecRouterFunc(conn_, data)
 			}
 		}
 	}(conn_)
@@ -105,7 +107,7 @@ func (c *Conn) GetIsPos() int64 {
 	return c.isPos
 }
 
-//发送协议体
+// 发送协议体
 func (c *Conn) Send(message proto.Message) error {
 	select {
 	case <-c.ctx.Done():
@@ -125,7 +127,7 @@ func (c *Conn) Send(message proto.Message) error {
 	}
 }
 
-//发送组装好的协议，但是加密始终是在组装包的时候完成加密功能
+// 发送组装好的协议，但是加密始终是在组装包的时候完成加密功能
 func (c *Conn) SendByte(message []byte) error {
 	select {
 	case <-c.ctx.Done():

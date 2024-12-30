@@ -23,6 +23,7 @@ type Conn struct {
 	conn         *kcp.UDPSession
 	serve        interface{}
 	data         interface{}
+	router       router.IRouter
 	isPos        int64
 	sendQueue    chan []byte
 	receiveQueue chan network.TransitData
@@ -39,6 +40,7 @@ func NewConn(serve interface{}, conn *kcp.UDPSession, pkg_ network.IPacket, opt 
 		guid:         utils.GenSonyflakeToo(),
 		conn:         conn,
 		pkg:          pkg_,
+		router:       router.NewRouterMgr(),
 		receiveQueue: make(chan network.TransitData, 5000),
 		sendQueue:    make(chan []byte, 5000),
 		times:        time.Now().Unix(),
@@ -69,7 +71,7 @@ func NewConn(serve interface{}, conn *kcp.UDPSession, pkg_ network.IPacket, opt 
 	go func(conn_ *Conn) {
 		for data := range conn_.receiveQueue {
 			if data.MsgId != 0 {
-				router.RouterMgr.ExecRouterFunc(conn_, data)
+				conn_.router.ExecRouterFunc(conn_, data)
 			}
 		}
 	}(conn_)
@@ -101,7 +103,7 @@ func (c *Conn) GetIsPos() int64 {
 	return c.isPos
 }
 
-//发送协议体
+// 发送协议体
 func (c *Conn) Send(message proto.Message) error {
 	select {
 	case <-c.ctx.Done():
@@ -120,7 +122,7 @@ func (c *Conn) Send(message proto.Message) error {
 	}
 }
 
-//发送组装好的协议，但是加密始终是在组装包的时候完成加密功能
+// 发送组装好的协议，但是加密始终是在组装包的时候完成加密功能
 func (c *Conn) SendByte(message []byte) error {
 	select {
 	case <-c.ctx.Done():
